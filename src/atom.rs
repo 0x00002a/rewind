@@ -17,14 +17,18 @@ impl<T, R, Undo: FnOnce(T) -> R> ValAtom<T, R, Undo> {
 }
 
 impl<T, R, Undo: FnOnce(T) -> R> Atom for ValAtom<T, R, Undo> {
-    fn undo(&mut self) {
+    type Undo = Option<R>;
+    type Cancel = Option<T>;
+    fn undo(&mut self) -> Self::Undo {
         if let Some(undo) = self.undo.take() {
-            undo(self.val.take().unwrap());
+            Some(undo(self.val.take().unwrap()))
+        } else {
+            None
         }
     }
-    fn cancel(&mut self) {
+    fn cancel(&mut self) -> Self::Cancel {
         self.undo.take();
-        self.val.take();
+        self.val.take()
     }
 }
 
@@ -58,7 +62,7 @@ impl<T, Undo: FnOnce(T) -> T> StoreAtom<T, Undo> {
 
 impl<T, Undo: FnOnce(T) -> T> Drop for StoreAtom<T, Undo> {
     fn drop(&mut self) {
-        self.cancel();
+        self.undo();
     }
 }
 
@@ -77,14 +81,17 @@ impl<T, Undo: FnOnce(T) -> T> DerefMut for StoreAtom<T, Undo> {
 }
 
 impl<T, Undo: FnOnce(T) -> T> Atom for StoreAtom<T, Undo> {
-    fn undo(&mut self) {
-        if let Some(f) = self.val.undo.take() {
-            self.stored = f(self.val.val.take().unwrap());
+    type Undo = ();
+    type Cancel = T;
+    fn undo(&mut self) -> Self::Undo {
+        if let Some(v) = self.val.undo() {
+            self.stored = v;
         }
     }
 
-    fn cancel(&mut self) {
+    fn cancel(&mut self) -> Self::Cancel {
         self.val.cancel();
+        self.stored
     }
 }
 
@@ -94,12 +101,23 @@ impl<T, Undo: FnOnce(T) -> T> Atom for StoreAtom<T, Undo> {
 /// be implemented on a generic this cannot be enforced
 #[allow(drop_bounds)]
 pub trait Atom: Drop {
+    type Undo;
+    type Cancel;
     /// Undo the operation
-    fn undo(&mut self);
+    fn undo(&mut self) -> Self::Undo;
     /// Cancel the operation
     ///
     /// After this call, calls to [`Atom::undo`] are not required to actually do anything
-    fn cancel(&mut self);
+    ///
+    /// Example usage:
+    /// ```
+    /// use rewind::Atom;
+    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
+    /// items.push("wow");
+    /// let items = items.cancel().unwrap();
+    /// assert_eq!(items.get(2), Some(&"wow"));
+    /// ```
+    fn cancel(&mut self) -> Self::Cancel;
 }
 
 #[cfg(test)]
