@@ -5,12 +5,12 @@ use std::{
 
 /// Carries a value with an undo action. If dropped without a call to `Atom::cancel` the undo
 /// action is called. See `rewind::atom` for usage examples
-pub struct ValAtom<T, R, Undo: FnOnce(T) -> R> {
+pub struct Simple<T, R, Undo: FnOnce(T) -> R> {
     val: Option<T>,
     undo: Option<Undo>,
 }
 
-impl<T, R, Undo: FnOnce(T) -> R> ValAtom<T, R, Undo> {
+impl<T, R, Undo: FnOnce(T) -> R> Simple<T, R, Undo> {
     pub(crate) fn new(val: T, undo: Undo) -> Self {
         Self {
             val: Some(val),
@@ -19,7 +19,7 @@ impl<T, R, Undo: FnOnce(T) -> R> ValAtom<T, R, Undo> {
     }
 }
 
-impl<T, R, Undo: FnOnce(T) -> R> Atom for ValAtom<T, R, Undo> {
+impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
     type Undo = Option<R>;
     type Cancel = Option<T>;
     fn undo(&mut self) -> Self::Undo {
@@ -35,23 +35,23 @@ impl<T, R, Undo: FnOnce(T) -> R> Atom for ValAtom<T, R, Undo> {
     }
 }
 
-impl<T, R, Undo: FnOnce(T) -> R> Drop for ValAtom<T, R, Undo> {
+impl<T, R, Undo: FnOnce(T) -> R> Drop for Simple<T, R, Undo> {
     fn drop(&mut self) {
         self.undo();
     }
 }
 
-pub struct StoreAtom<T, Undo: FnOnce(T) -> T> {
-    val: ValAtom<T, T, Undo>,
+pub struct Owning<T, Undo: FnOnce(T) -> T> {
+    val: Simple<T, T, Undo>,
     stored: ManuallyDrop<T>,
 }
-impl<T, Undo: FnOnce(T) -> T> StoreAtom<T, Undo> {
+impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
     pub(crate) fn new(val: T, undo: Undo) -> Self
     where
         T: Clone,
     {
         Self {
-            val: ValAtom::new(val.clone(), undo),
+            val: Simple::new(val.clone(), undo),
             stored: ManuallyDrop::new(val),
         }
     }
@@ -81,13 +81,13 @@ impl<T, Undo: FnOnce(T) -> T> StoreAtom<T, Undo> {
     }
 }
 
-impl<T, Undo: FnOnce(T) -> T> Drop for StoreAtom<T, Undo> {
+impl<T, Undo: FnOnce(T) -> T> Drop for Owning<T, Undo> {
     fn drop(&mut self) {
         self.undo();
     }
 }
 
-impl<T, Undo: FnOnce(T) -> T> Deref for StoreAtom<T, Undo> {
+impl<T, Undo: FnOnce(T) -> T> Deref for Owning<T, Undo> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -95,13 +95,13 @@ impl<T, Undo: FnOnce(T) -> T> Deref for StoreAtom<T, Undo> {
     }
 }
 
-impl<T, Undo: FnOnce(T) -> T> DerefMut for StoreAtom<T, Undo> {
+impl<T, Undo: FnOnce(T) -> T> DerefMut for Owning<T, Undo> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.stored
     }
 }
 
-impl<T, Undo: FnOnce(T) -> T> Atom for StoreAtom<T, Undo> {
+impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     type Undo = ();
     type Cancel = Option<T>;
     fn undo(&mut self) -> Self::Undo {
@@ -137,7 +137,7 @@ pub trait Atom: Drop {
     /// let items = items.cancel().unwrap();
     /// assert_eq!(items.len(), 2);
     /// ```
-    /// Note how the length of the items is 2 at the end, this is because for [`StoreAtom`] this function
+    /// Note how the length of the items is 2 at the end, this is because for [`rewind::atom::Owning`] this function
     /// must return the unmodified value (as otherwise it would have to clone)
     ///
     fn cancel(&mut self) -> Self::Cancel;
@@ -152,7 +152,7 @@ mod tests {
     fn atom_runs_on_drop_if_uncancelled() {
         let mut scoped = 12;
         {
-            let atom = ValAtom::new(&mut scoped, |v| {
+            let atom = Simple::new(&mut scoped, |v| {
                 *v = 0;
             });
             drop(atom);
@@ -164,7 +164,7 @@ mod tests {
     fn cancelling_atom_stops_it_running_on_drop() {
         let mut scoped = 12;
         {
-            let mut atom = ValAtom::new(&mut scoped, |s| {
+            let mut atom = Simple::new(&mut scoped, |s| {
                 *s = 13;
             });
             atom.cancel();

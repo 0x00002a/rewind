@@ -33,8 +33,8 @@ pub fn id<T>(v: T) -> T {
 
 /// Create an undo operation with stored data
 ///
-pub fn atom<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::ValAtom<T, R, Undo> {
-    atom::ValAtom::new(value, undo)
+pub fn atom<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::Simple<T, R, Undo> {
+    atom::Simple::new(value, undo)
 }
 
 /// Provides a way around rust's ownership requirements.
@@ -57,8 +57,8 @@ pub fn atom<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::ValAtom<T
 /// assert_eq!(items.len(), 2);
 /// ```
 ///
-pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::StoreAtom<T, Undo> {
-    atom::StoreAtom::new(value, undo)
+pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::Owning<T, Undo> {
+    atom::Owning::new(value, undo)
 }
 
 #[cfg(test)]
