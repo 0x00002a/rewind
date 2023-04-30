@@ -34,7 +34,7 @@ pub fn id<T>(v: T) -> T {
 
 /// Create an undo operation with stored data
 ///
-pub fn atom<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::Simple<T, R, Undo> {
+pub fn simple<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::Simple<T, R, Undo> {
     atom::Simple::new(value, undo)
 }
 
