@@ -21,27 +21,35 @@ impl<T, R, Undo: FnOnce(T) -> R> Simple<T, R, Undo> {
             undo: Some(ManuallyDrop::new(undo)),
         }
     }
+    fn undo_mut(&mut self) -> Option<R> {
+        if let Some(mut undo) = self.undo.take() {
+            Some(unsafe { ManuallyDrop::take(&mut undo)(ManuallyDrop::take(&mut self.val)) })
+        } else {
+            None
+        }
+    }
 }
 
 impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
     type Undo = R;
     type Cancel = T;
     fn undo(mut self) -> Self::Undo {
-        ManuallyDrop::into_inner(self.undo.take().unwrap())(ManuallyDrop::into_inner(self.val))
+        self.undo_mut().unwrap()
     }
     fn cancel(mut self) -> Self::Cancel {
-        ManuallyDrop::into_inner(self.val)
+        self.undo.take().map(|u| ManuallyDrop::into_inner(u));
+        unsafe { ManuallyDrop::take(&mut self.val) }
     }
 }
 
 impl<T, R, Undo: FnOnce(T) -> R> Drop for Simple<T, R, Undo> {
     fn drop(&mut self) {
-        self.undo();
+        self.undo_mut();
     }
 }
 
 pub struct Owning<T, Undo: FnOnce(T) -> T> {
-    val: Simple<T, T, Undo>,
+    val: Option<ManuallyDrop<Simple<T, T, Undo>>>,
     stored: ManuallyDrop<T>,
 }
 impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
@@ -50,7 +58,7 @@ impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
         T: Clone,
     {
         Self {
-            val: Simple::new(val.clone(), undo),
+            val: Some(ManuallyDrop::new(Simple::new(val.clone(), undo))),
             stored: ManuallyDrop::new(val),
         }
     }
@@ -60,29 +68,18 @@ impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.stored
     }
-    /// Consume the atom and return the modified values
-    ///
-    /// This is in contrast to [`Atom::cancel`] which returns the _unmodified_ value
-    /// as otherwise it would have to clone
-    ///
-    /// Example usage:
-    /// ```
-    /// use rewind::Atom;
-    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
-    /// items.push("wow");
-    /// let items = items.into_inner();
-    /// assert_eq!(items.get(2), Some(&"wow"));
-    /// ```
-    pub fn into_inner(mut self) -> T {
-        self.cancel();
-        let stored = unsafe { ManuallyDrop::take(&mut self.stored) };
-        stored
+    fn undo_mut(&mut self) -> Option<T> {
+        if let Some(mut val) = self.val.as_mut().take() {
+            Some(unsafe { ManuallyDrop::take(&mut val) }.undo())
+        } else {
+            None
+        }
     }
 }
 
 impl<T, Undo: FnOnce(T) -> T> Drop for Owning<T, Undo> {
     fn drop(&mut self) {
-        self.undo();
+        self.undo_mut();
     }
 }
 
@@ -104,33 +101,39 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     type Undo = T;
     type Cancel = T;
     fn undo(mut self) -> Self::Undo {
-        self.val.undo()
+        self.undo_mut().unwrap()
     }
 
+    /// Returns the modified part
+    ///
+    /// Example usage:
+    /// ```
+    /// use rewind::Atom;
+    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
+    /// items.push("wow");
+    /// let items = items.cancel();
+    /// assert_eq!(items.get(2), Some(&"wow"));
+    /// ```
     fn cancel(mut self) -> Self::Cancel {
-        self.val.cancel();
+        unsafe { ManuallyDrop::take(&mut self.val.take().unwrap()) }.cancel();
         let stored = unsafe { ManuallyDrop::take(&mut self.stored) };
         stored
     }
 }
 
-struct SideEffectInner<T, Undo> {
-    value: T,
-    undo: Undo,
-}
 pub struct Encased<S>(Rc<RefCell<S>>);
 
-pub struct SideEffect<T, S, Undo: FnOnce(&mut S, T)> {
+pub struct SideEffect<T, R, S, Undo: FnOnce(&mut S, T) -> R> {
     undo: Option<ManuallyDrop<Undo>>,
     value: ManuallyDrop<T>,
     parent: Encased<S>,
 }
 impl<S> Encased<S> {
-    pub fn peel_mut<R, U: FnOnce(&mut S, R)>(
+    pub fn peel_mut<R, Ru, U: FnOnce(&mut S, R) -> Ru>(
         &mut self,
         act: impl FnOnce(&mut S) -> R,
         undo: U,
-    ) -> SideEffect<R, S, U> {
+    ) -> SideEffect<R, Ru, S, U> {
         let stored = act(&mut (*self.0).borrow_mut());
         SideEffect::with_parent(stored, undo, Encased(self.0.clone()))
     }
@@ -151,7 +154,7 @@ impl<S> DerefMut for Encased<S> {
     }
 }
 
-impl<T, S, Undo: FnOnce(&mut S, T)> SideEffect<T, S, Undo> {
+impl<T, R, S, Undo: FnOnce(&mut S, T) -> R> SideEffect<T, R, S, Undo> {
     fn with_parent(value: T, undo: Undo, parent: Encased<S>) -> Self {
         Self {
             undo: Some(ManuallyDrop::new(undo)),
@@ -162,33 +165,47 @@ impl<T, S, Undo: FnOnce(&mut S, T)> SideEffect<T, S, Undo> {
     pub(crate) fn new(value: T, undo: Undo, parent: S) -> Self {
         Self::with_parent(value, undo, Encased::new(parent))
     }
-    pub fn peel_mut<R, U: FnOnce(&mut S, R)>(
+    pub fn peel_mut<Rv, Ru, U: FnOnce(&mut S, Rv) -> Ru>(
         &mut self,
-        act: impl FnOnce(&mut S) -> R,
+        act: impl FnOnce(&mut S) -> Rv,
         undo: U,
-    ) -> SideEffect<R, S, U> {
+    ) -> SideEffect<Rv, Ru, S, U> {
         self.parent.peel_mut(act, undo)
     }
 }
-impl<T, S, Undo: FnOnce(&mut S, T)> Deref for SideEffect<T, S, Undo> {
+impl<T, R, S, Undo: FnOnce(&mut S, T) -> R> Deref for SideEffect<T, R, S, Undo> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
-impl<T, S, Undo: FnOnce(&mut S, T)> DerefMut for SideEffect<T, S, Undo> {
+impl<T, R, S, Undo: FnOnce(&mut S, T) -> R> DerefMut for SideEffect<T, R, S, Undo> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
 }
-impl<T, S, Undo: FnOnce(&mut S, T)> Drop for SideEffect<T, S, Undo> {
+impl<T, R, S, Undo: FnOnce(&mut S, T) -> R> Drop for SideEffect<T, R, S, Undo> {
     fn drop(&mut self) {
         if let Some(undo) = &mut self.undo {
             let value = unsafe { ManuallyDrop::take(&mut self.value) };
             let undo = unsafe { ManuallyDrop::take(undo) };
             undo(&mut self.parent, value);
         }
+    }
+}
+impl<T, S, R, Undo: FnOnce(&mut S, T) -> R> Atom for SideEffect<T, R, S, Undo> {
+    type Undo = R;
+    type Cancel = T;
+
+    fn undo(mut self) -> Self::Undo {
+        let value = unsafe { ManuallyDrop::take(&mut self.value) };
+        ManuallyDrop::into_inner(self.undo.take().unwrap())(&mut self.parent, value)
+    }
+
+    fn cancel(mut self) -> Self::Cancel {
+        self.undo.take();
+        unsafe { ManuallyDrop::take(&mut self.value) }
     }
 }
 

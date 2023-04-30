@@ -49,8 +49,8 @@ pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::Owning
     atom::Owning::new(value, undo)
 }
 
-pub fn encase<S, R, U: FnOnce(&mut S, R)>(s: S, undo: U) -> atom::SideEffect<S, S, U> {
-    atom::SideEffect::new(v, undo, s)
+pub fn encase<S>(s: S) -> atom::Encased<S> {
+    atom::Encased::new(s)
 }
 
 #[cfg(test)]
@@ -61,5 +61,26 @@ mod tests {
     fn t1() {
         let mut items = vec![1, 2, 3];
         let mut items = encase(items);
+        items.peel_mut(
+            |i| i.push(3),
+            |i, _| {
+                i.pop();
+            },
+        );
+        items.peel_mut(
+            |i| i.push(5),
+            |i, _| {
+                i.pop();
+            },
+        );
+        let v = items.peel_mut(
+            |i| i.pop(),
+            |i, v| {
+                if let Some(v) = v {
+                    i.push(v);
+                }
+            },
+        );
+        assert_eq!(*v, Some(5));
     }
 }
