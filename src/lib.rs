@@ -1,22 +1,9 @@
+#![doc = include_str!("../README.md")]
+
 pub mod atom;
-pub mod stack;
 
 pub use atom::Atom;
 
-#[allow(unused)]
-fn using<T, E, R>(
-    mut value: T,
-    act: impl FnOnce(&mut T) -> std::result::Result<R, E>,
-    undo: impl FnOnce(&mut T),
-) -> std::result::Result<R, E> {
-    match act(&mut value) {
-        Ok(v) => Ok(v),
-        Err(e) => {
-            undo(&mut value);
-            Err(e)
-        }
-    }
-}
 /// Identity
 ///
 /// Here to help with functions such as [`rewind::own`]
@@ -62,22 +49,17 @@ pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::Owning
     atom::Owning::new(value, undo)
 }
 
+pub fn encase<S, R, U: FnOnce(&mut S, R)>(s: S, undo: U) -> atom::SideEffect<S, S, U> {
+    atom::SideEffect::new(v, undo, s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn atom_1() {
-        let mut vec = Vec::new();
-        using(
-            &mut vec,
-            |v| {
-                v.push(0);
-                Ok::<(), ()>(())
-            },
-            |v| {
-                v.remove(0);
-            },
-        )
-        .unwrap();
+    fn t1() {
+        let mut items = vec![1, 2, 3];
+        let mut items = encase(items);
     }
 }

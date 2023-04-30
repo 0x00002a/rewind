@@ -10,32 +10,27 @@ use std::{
 /// Carries a value with an undo action. If dropped without a call to `Atom::cancel` the undo
 /// action is called. See `rewind::atom` for usage examples
 pub struct Simple<T, R, Undo: FnOnce(T) -> R> {
-    val: Option<T>,
-    undo: Option<Undo>,
+    val: ManuallyDrop<T>,
+    undo: Option<ManuallyDrop<Undo>>,
 }
 
 impl<T, R, Undo: FnOnce(T) -> R> Simple<T, R, Undo> {
     pub(crate) fn new(val: T, undo: Undo) -> Self {
         Self {
-            val: Some(val),
-            undo: Some(undo),
+            val: ManuallyDrop::new(val),
+            undo: Some(ManuallyDrop::new(undo)),
         }
     }
 }
 
 impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
-    type Undo = Option<R>;
-    type Cancel = Option<T>;
-    fn undo(&mut self) -> Self::Undo {
-        if let Some(undo) = self.undo.take() {
-            Some(undo(self.val.take().unwrap()))
-        } else {
-            None
-        }
+    type Undo = R;
+    type Cancel = T;
+    fn undo(mut self) -> Self::Undo {
+        ManuallyDrop::into_inner(self.undo.take().unwrap())(ManuallyDrop::into_inner(self.val))
     }
-    fn cancel(&mut self) -> Self::Cancel {
-        self.undo.take();
-        self.val.take()
+    fn cancel(mut self) -> Self::Cancel {
+        ManuallyDrop::into_inner(self.val)
     }
 }
 
@@ -106,16 +101,16 @@ impl<T, Undo: FnOnce(T) -> T> DerefMut for Owning<T, Undo> {
 }
 
 impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
-    type Undo = ();
-    type Cancel = Option<T>;
-    fn undo(&mut self) -> Self::Undo {
-        if let Some(v) = self.val.undo() {
-            self.stored = ManuallyDrop::new(v);
-        }
+    type Undo = T;
+    type Cancel = T;
+    fn undo(mut self) -> Self::Undo {
+        self.val.undo()
     }
 
-    fn cancel(&mut self) -> Self::Cancel {
-        self.val.cancel()
+    fn cancel(mut self) -> Self::Cancel {
+        self.val.cancel();
+        let stored = unsafe { ManuallyDrop::take(&mut self.stored) };
+        stored
     }
 }
 
@@ -206,7 +201,7 @@ pub trait Atom: Drop {
     type Undo;
     type Cancel;
     /// Undo the operation
-    fn undo(&mut self) -> Self::Undo;
+    fn undo(self) -> Self::Undo;
     /// Cancel the operation
     ///
     /// After this call, calls to [`Atom::undo`] are not required to actually do anything
@@ -222,7 +217,7 @@ pub trait Atom: Drop {
     /// Note how the length of the items is 2 at the end, this is because for [`rewind::atom::Owning`] this function
     /// must return the unmodified value (as otherwise it would have to clone)
     ///
-    fn cancel(&mut self) -> Self::Cancel;
+    fn cancel(self) -> Self::Cancel;
 }
 
 #[cfg(test)]
