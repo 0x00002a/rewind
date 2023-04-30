@@ -1,4 +1,5 @@
 pub mod atom;
+pub mod stack;
 
 pub fn using<T, E, R>(
     mut value: T,
@@ -14,9 +15,11 @@ pub fn using<T, E, R>(
     }
 }
 
-pub fn atom<T, Undo: FnOnce(T)>(value: T, undo: Undo) -> atom::Atom<T, Undo> {
-    atom::Atom::new(value, undo)
+/// Create an undo operation with stored data
+pub fn atom<T, Undo: FnOnce(T)>(value: T, undo: Undo) -> atom::ValAtom<T, Undo> {
+    atom::ValAtom::new(value, undo)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -33,6 +36,7 @@ mod tests {
             |v| {
                 v.remove(0);
             },
-        );
+        )
+        .unwrap();
     }
 }
