@@ -1,6 +1,10 @@
 use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::{Cell, RefCell},
+    marker::PhantomData,
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 /// Carries a value with an undo action. If dropped without a call to `Atom::cancel` the undo
@@ -112,6 +116,84 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
 
     fn cancel(&mut self) -> Self::Cancel {
         self.val.cancel()
+    }
+}
+
+struct SideEffectInner<T, Undo> {
+    value: T,
+    undo: Undo,
+}
+pub struct Encased<S>(Rc<RefCell<S>>);
+
+pub struct SideEffect<T, S, Undo: FnOnce(&mut S, T)> {
+    undo: Option<ManuallyDrop<Undo>>,
+    value: ManuallyDrop<T>,
+    parent: Encased<S>,
+}
+impl<S> Encased<S> {
+    pub fn peel_mut<R, U: FnOnce(&mut S, R)>(
+        &mut self,
+        act: impl FnOnce(&mut S) -> R,
+        undo: U,
+    ) -> SideEffect<R, S, U> {
+        let stored = act(&mut (*self.0).borrow_mut());
+        SideEffect::with_parent(stored, undo, Encased(self.0.clone()))
+    }
+    pub(crate) fn new(s: S) -> Self {
+        Self(Rc::new(RefCell::new(s)))
+    }
+}
+impl<S> Deref for Encased<S> {
+    type Target = S;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*(*self.0).as_ptr() }
+    }
+}
+impl<S> DerefMut for Encased<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(*self.0).as_ptr() }
+    }
+}
+
+impl<T, S, Undo: FnOnce(&mut S, T)> SideEffect<T, S, Undo> {
+    fn with_parent(value: T, undo: Undo, parent: Encased<S>) -> Self {
+        Self {
+            undo: Some(ManuallyDrop::new(undo)),
+            value: ManuallyDrop::new(value),
+            parent,
+        }
+    }
+    pub(crate) fn new(value: T, undo: Undo, parent: S) -> Self {
+        Self::with_parent(value, undo, Encased::new(parent))
+    }
+    pub fn peel_mut<R, U: FnOnce(&mut S, R)>(
+        &mut self,
+        act: impl FnOnce(&mut S) -> R,
+        undo: U,
+    ) -> SideEffect<R, S, U> {
+        self.parent.peel_mut(act, undo)
+    }
+}
+impl<T, S, Undo: FnOnce(&mut S, T)> Deref for SideEffect<T, S, Undo> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl<T, S, Undo: FnOnce(&mut S, T)> DerefMut for SideEffect<T, S, Undo> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+impl<T, S, Undo: FnOnce(&mut S, T)> Drop for SideEffect<T, S, Undo> {
+    fn drop(&mut self) {
+        if let Some(undo) = &mut self.undo {
+            let value = unsafe { ManuallyDrop::take(&mut self.value) };
+            let undo = unsafe { ManuallyDrop::take(undo) };
+            undo(&mut self.parent, value);
+        }
     }
 }
 
