@@ -12,10 +12,16 @@ impl<T, R, Act: FnOnce(&mut T) -> R, Undo: FnOnce(&mut T)> Atom<T, R, Act, Undo>
             undo: Some(undo),
         }
     }
-    pub fn eval(mut self) -> R {
+    pub fn consume(mut self) -> R {
         self.act.take().unwrap()(&mut self.val)
     }
-    pub fn cancel(mut self) {
+    pub fn eval(&mut self) -> R
+    where
+        Act: FnMut(&mut T) -> R,
+    {
+        self.act.as_mut().unwrap()(&mut self.val)
+    }
+    pub fn cancel(&mut self) {
         self.undo.take();
     }
 }
@@ -53,7 +59,7 @@ mod tests {
     fn cancelling_atom_stops_it_running_on_drop() {
         let mut scoped = 12;
         {
-            let atom = Atom::new(
+            let mut atom = Atom::new(
                 &mut scoped,
                 |s| {
                     **s = 13;
