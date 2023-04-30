@@ -16,10 +16,34 @@ pub fn using<T, E, R>(
 }
 
 /// Create an undo operation with stored data
-pub fn atom<T, Undo: FnOnce(T)>(value: T, undo: Undo) -> atom::ValAtom<T, Undo> {
+///
+pub fn atom<T, Undo: FnOnce(T)>(value: T, undo: Undo) -> atom::ValAtom<T, (), Undo> {
     atom::ValAtom::new(value, undo)
 }
 
+/// Provides a way around rust's ownership requirements.
+///
+/// E.g. the following code does not compile:
+/// ```compile_fail
+/// let mut items = vec!["a", "b"];
+/// let mut op = rewind::atom(items.clone(), |v| items = v);
+/// items.clear(); // boom
+/// drop(items);
+/// ```
+/// Instead we need to let the atom keep the ownership, thats where [`own`] comes in:
+/// ```
+/// use rewind::atom::Atom;
+/// let mut items = vec!["a", "b"];
+/// let mut items = rewind::own(items, |v| v);
+/// items.clear();
+/// assert_eq!(items.len(), 0);
+/// items.undo();
+/// assert_eq!(items.len(), 2);
+/// ```
+///
+pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::StoreAtom<T, Undo> {
+    atom::StoreAtom::new(value, undo)
+}
 
 #[cfg(test)]
 mod tests {
