@@ -3,7 +3,8 @@ pub mod stack;
 
 pub use atom::Atom;
 
-pub fn using<T, E, R>(
+#[allow(unused)]
+fn using<T, E, R>(
     mut value: T,
     act: impl FnOnce(&mut T) -> std::result::Result<R, E>,
     undo: impl FnOnce(&mut T),
