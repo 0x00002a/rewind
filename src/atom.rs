@@ -69,7 +69,7 @@ impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
         &mut self.stored
     }
     fn undo_mut(&mut self) -> Option<T> {
-        if let Some(mut val) = self.val.as_mut().take() {
+        if let Some(mut val) = self.val.take() {
             Some(unsafe { ManuallyDrop::take(&mut val) }.undo())
         } else {
             None
@@ -241,6 +241,15 @@ pub trait Atom: Drop {
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn simple_undo_does_not_cause_ub_on_drop() {
+        Simple::new(vec!["test"], rewind::id).undo();
+    }
+    #[test]
+    fn owned_undo_does_not_cause_ub_on_drop() {
+        Owning::new(vec!["test"], rewind::id).undo();
+    }
 
     #[test]
     fn atom_runs_on_drop_if_uncancelled() {
