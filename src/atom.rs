@@ -36,7 +36,7 @@ impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
     fn undo(mut self) -> Self::Undo {
         self.undo_mut().unwrap()
     }
-    fn cancel(mut self) -> Self::Cancel {
+    fn decay(mut self) -> Self::Cancel {
         self.undo.take().map(|u| ManuallyDrop::into_inner(u));
         unsafe { ManuallyDrop::take(&mut self.val) }
     }
@@ -111,11 +111,11 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     /// use rewind::Atom;
     /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
     /// items.push("wow");
-    /// let items = items.cancel();
+    /// let items = items.decay();
     /// assert_eq!(items.get(2), Some(&"wow"));
     /// ```
-    fn cancel(mut self) -> Self::Cancel {
-        unsafe { ManuallyDrop::take(&mut self.val.take().unwrap()) }.cancel();
+    fn decay(mut self) -> Self::Cancel {
+        unsafe { ManuallyDrop::take(&mut self.val.take().unwrap()) }.decay();
         let stored = unsafe { ManuallyDrop::take(&mut self.stored) };
         stored
     }
@@ -203,7 +203,7 @@ impl<T, S, R, Undo: FnOnce(&mut S, T) -> R> Atom for SideEffect<T, R, S, Undo> {
         ManuallyDrop::into_inner(self.undo.take().unwrap())(&mut self.parent, value)
     }
 
-    fn cancel(mut self) -> Self::Cancel {
+    fn decay(mut self) -> Self::Cancel {
         self.undo.take();
         unsafe { ManuallyDrop::take(&mut self.value) }
     }
@@ -227,17 +227,17 @@ pub trait Atom: Drop {
     /// assert_eq!(items.len(), 2);
     /// ```
     fn undo(self) -> Self::Undo;
-    /// Cancel the operation
+    /// Forget about how to undo
     ///
     /// Example usage:
     /// ```
     /// use rewind::Atom;
     /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
     /// items.push("wow");
-    /// let items = items.cancel();
+    /// let items = items.decay();
     /// assert_eq!(items.len(), 3);
     /// ```
-    fn cancel(self) -> Self::Cancel;
+    fn decay(self) -> Self::Cancel;
 }
 
 #[cfg(test)]
@@ -273,7 +273,7 @@ mod tests {
             let mut atom = Simple::new(&mut scoped, |s| {
                 *s = 13;
             });
-            atom.cancel();
+            atom.decay();
         }
         assert_eq!(scoped, 12);
     }
