@@ -14,7 +14,7 @@ pub use atom::Atom;
 /// use rewind::Atom;
 /// let mut items = rewind::own(vec![1, 2, 3], rewind::id);
 /// items.clear();
-/// items.undo();
+/// let items = items.undo();
 /// assert_eq!(items.len(), 3);
 /// ```
 pub fn id<T>(v: T) -> T {
@@ -38,12 +38,12 @@ pub fn simple<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::Simple<
 /// ```
 /// Instead we need to let the atom keep the ownership, thats where [`own`] comes in:
 /// ```
-/// use rewind::atom::Atom;
-/// let mut items = vec!["a", "b"];
+/// # use rewind::atom::Atom;
+/// let items = vec!["a", "b"];
 /// let mut items = rewind::own(items, |v| v);
 /// items.clear();
 /// assert_eq!(items.len(), 0);
-/// items.undo();
+/// let items = items.undo();
 /// assert_eq!(items.len(), 2);
 /// ```
 ///
