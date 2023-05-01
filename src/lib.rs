@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+extern crate self as rewind;
+
 pub mod atom;
 
 pub use atom::Atom;
@@ -55,24 +57,57 @@ pub fn encase<S>(s: S) -> atom::Encased<S> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::*;
 
     #[test]
-    fn t1() {
-        let mut items = vec![1, 2, 3];
-        let mut items = encase(items);
-        items.peel_mut(
-            |i| i.push(3),
-            |i, _| {
-                i.pop();
-            },
-        );
-        items.peel_mut(
-            |i| i.push(5),
-            |i, _| {
-                i.pop();
-            },
-        );
+    fn isomorphic_attr() {
+        #[derive(Default)]
+        struct Stack<T> {
+            els: Vec<T>,
+        }
+        impl<T> Stack<T> {
+            pub fn pop(&mut self) -> Result<T, ()> {
+                self.els.pop().ok_or(())
+            }
+
+            pub fn push(&mut self, el: T) {
+                self.els.push(el);
+            }
+        }
+        fn may_fail() -> Result<(), ()> {
+            Err(())
+        }
+
+        let mut s = rewind::encase(Stack::<i32>::default());
+        let result = (|| {
+            s.push(4);
+            s.push(5);
+            let value = s.peel_mut(
+                |s| s.pop(),
+                |s, v| {
+                    if let Ok(v) = v {
+                        s.push(v);
+                    }
+                },
+            );
+            may_fail()?;
+            println!("{}", value.cancel()?);
+            Ok::<(), ()>(())
+        })();
+        assert!(result.is_err());
+        assert_eq!(s.els, vec![4, 5]); // uh oh
+    }
+    #[test]
+    fn encasing_cannot_leak_abstraction_and_cause_panic_due_to_multiple_borrows() {
+        let mut items = encase(vec![1, 2, 3]);
+        let b1 = items.peel_mut(|i| i.push(4), |i, _| i.pop());
+        let b2 = items.peel_mut(|i| i.push(5), |i, _| i.pop());
+    }
+    #[test]
+    fn peeling_mutably_allows_reversing_a_mutable_operation() {
+        let mut items = encase(vec![1, 2, 3]);
         let v = items.peel_mut(
             |i| i.pop(),
             |i, v| {
@@ -81,6 +116,9 @@ mod tests {
                 }
             },
         );
-        assert_eq!(*v, Some(5));
+        assert_eq!(*v, Some(3));
+        assert_eq!(items.len(), 2);
+        v.undo();
+        assert_eq!(items.len(), 3);
     }
 }

@@ -8,11 +8,11 @@ impl<C: Any, U: Any, A: Atom<Cancel = C, Undo = U>> Atom for StackAtom<A> {
     type Undo = Box<dyn Any>;
     type Cancel = Box<dyn Any>;
 
-    fn undo(&mut self) -> Self::Undo {
+    fn undo(self) -> Self::Undo {
         Box::new(self.0.undo())
     }
 
-    fn cancel(&mut self) -> Self::Cancel {
+    fn cancel(self) -> Self::Cancel {
         Box::new(self.0.cancel())
     }
 }
@@ -40,9 +40,7 @@ impl Stack {
     }
 }
 impl Drop for Stack {
-    fn drop(&mut self) {
-        self.undo();
-    }
+    fn drop(&mut self) {}
 }
 
 pub trait StackedAtom: Atom + Sized + 'static {
@@ -58,11 +56,11 @@ impl<A: Atom + 'static + Sized> StackedAtom for A {}
 impl Atom for Stack {
     type Undo = Vec<Box<dyn Any>>;
     type Cancel = Vec<Box<dyn Any>>;
-    fn undo(&mut self) -> Self::Undo {
-        self.atoms.iter_mut().map(|a| a.undo()).collect()
+    fn undo(self) -> Self::Undo {
+        self.atoms.into_iter().map(|a| a.undo()).collect()
     }
 
-    fn cancel(&mut self) -> Self::Cancel {
-        self.atoms.iter_mut().map(|a| a.cancel()).collect()
+    fn cancel(self) -> Self::Cancel {
+        self.atoms.into_iter().map(|a| a.cancel()).collect()
     }
 }

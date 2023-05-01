@@ -228,7 +228,7 @@ pub trait Atom: Drop {
     /// use rewind::Atom;
     /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
     /// items.push("wow");
-    /// let items = items.cancel().unwrap();
+    /// let items = items.undo();
     /// assert_eq!(items.len(), 2);
     /// ```
     /// Note how the length of the items is 2 at the end, this is because for [`rewind::atom::Owning`] this function
