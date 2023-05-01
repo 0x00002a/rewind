@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    fmt::Debug,
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     rc::Rc,
@@ -58,6 +59,11 @@ impl<T, R, Undo: FnOnce(T) -> R> Drop for Simple<T, R, Undo> {
         self.undo_mut();
     }
 }
+impl<T: Debug, R, Undo: FnOnce(T) -> R> Debug for Simple<T, R, Undo> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Simple").field("value", &self.val).finish()
+    }
+}
 
 /// Caries an undo operation + an owned mutable value
 ///
@@ -108,6 +114,14 @@ impl<T, Undo: FnOnce(T) -> T> DerefMut for Owning<T, Undo> {
         &mut self.stored
     }
 }
+impl<T: Debug, Undo: FnOnce(T) -> T> Debug for Owning<T, Undo> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Owning")
+            .field("inner", &self.val)
+            .field("mutable", &self.stored)
+            .finish()
+    }
+}
 
 impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     type Undo = T;
@@ -135,7 +149,15 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
 ///
 ///
 /// See [`encase`](rewind::encase) for usage details
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Default)]
+#[repr(transparent)]
 pub struct Encased<S>(Rc<RefCell<S>>);
+
+impl<S> Clone for Encased<S> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 /// An operation that has side effects on a shared state
 ///
@@ -220,6 +242,14 @@ impl<T, S, R, Undo: FnOnce(&mut S, T) -> R> Atom for SideEffect<T, R, S, Undo> {
     fn decay(mut self) -> Self::Cancel {
         self.undo.take();
         unsafe { ManuallyDrop::take(&mut self.value) }
+    }
+}
+impl<T: Debug, S: Debug, R, Undo: FnOnce(&mut S, T) -> R> Debug for SideEffect<T, R, S, Undo> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SideEffect")
+            .field("value", &self.value)
+            .field("parent", &self.parent)
+            .finish()
     }
 }
 
