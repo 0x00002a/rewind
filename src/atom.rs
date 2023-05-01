@@ -211,19 +211,14 @@ impl<T, S, R, Undo: FnOnce(&mut S, T) -> R> Atom for SideEffect<T, R, S, Undo> {
 
 /// An undo action that can be cancelled
 ///
-/// Implementors should implement [`Drop`] as `self.cancel();`, although unfortunately since [`Drop`] cannot
+/// Implementors should implement [`Drop`] as `self.undo();`, although unfortunately since [`Drop`] cannot
 /// be implemented on a generic this cannot be enforced
 #[allow(drop_bounds)]
 pub trait Atom: Drop {
     type Undo;
     type Cancel;
     /// Undo the operation
-    fn undo(self) -> Self::Undo;
-    /// Cancel the operation
     ///
-    /// After this call, calls to [`Atom::undo`] are not required to actually do anything
-    ///
-    /// Example usage:
     /// ```
     /// use rewind::Atom;
     /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
@@ -231,9 +226,17 @@ pub trait Atom: Drop {
     /// let items = items.undo();
     /// assert_eq!(items.len(), 2);
     /// ```
-    /// Note how the length of the items is 2 at the end, this is because for [`rewind::atom::Owning`] this function
-    /// must return the unmodified value (as otherwise it would have to clone)
+    fn undo(self) -> Self::Undo;
+    /// Cancel the operation
     ///
+    /// Example usage:
+    /// ```
+    /// use rewind::Atom;
+    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
+    /// items.push("wow");
+    /// let items = items.cancel();
+    /// assert_eq!(items.len(), 3);
+    /// ```
     fn cancel(self) -> Self::Cancel;
 }
 
