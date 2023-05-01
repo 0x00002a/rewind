@@ -36,10 +36,21 @@ pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::Owning
     atom::Owning::new(value, undo)
 }
 
+/// [`own`](rewind::own) with identity
 pub fn own_id<T: Clone>(value: T) -> atom::Owning<T, impl FnOnce(T) -> T> {
     atom::Owning::new(value, |c| c)
 }
 
+/// Lift a value to a source for operations
+///
+/// This function puts `S` on the heap and has additional runtime overhead on top of that. The
+/// overhead isn't _massive_, but if its a choice between this and copying a few dozen vector
+/// elements with [`own_id`], you should probably go with the latter.
+///
+/// There are a few cases where this is very useful, for example see the usage of `Stack` on the
+/// main page or the README: by storing the value in this atom we can "peel" off multiple mutable
+/// operations from it which would not be possible normally (without [`RefCell`](std::cell::RefCell) anyway)
+///
 pub fn encase<S>(s: S) -> atom::Encased<S> {
     atom::Encased::new(s)
 }
@@ -80,8 +91,16 @@ mod tests {
                     }
                 },
             );
+            let v2 = s.peel_mut(
+                |s| s.pop(),
+                |s, v| {
+                    if let Ok(v) = v {
+                        s.push(v);
+                    }
+                },
+            );
             may_fail()?;
-            println!("{}", value.decay()?);
+            println!("{}, {}", value.decay()?, v2.decay()?);
             Ok::<(), ()>(())
         })();
         assert!(result.is_err());

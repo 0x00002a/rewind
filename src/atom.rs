@@ -5,8 +5,7 @@ use std::{
     rc::Rc,
 };
 
-/// Carries a value with an undo action. If dropped without a call to `Atom::cancel` the undo
-/// action is called. See `rewind::atom` for usage examples
+/// Carries a value with an undo action
 pub struct Simple<T, R, Undo: FnOnce(T) -> R> {
     val: ManuallyDrop<T>,
     undo: Option<ManuallyDrop<Undo>>,
@@ -31,9 +30,23 @@ impl<T, R, Undo: FnOnce(T) -> R> Simple<T, R, Undo> {
 impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
     type Undo = R;
     type Cancel = T;
+    /// Returns the result of the undo function
+    ///
+    /// ```
+    /// # use rewind::Atom;
+    /// let v = rewind::simple(4, |v| v + 2);
+    /// assert_eq!(v.undo(), 6);
+    /// ```
     fn undo(mut self) -> Self::Undo {
         self.undo_mut().unwrap()
     }
+    /// Returns the original value
+    ///
+    /// ```
+    /// # use rewind::Atom;
+    /// let v = rewind::simple(4, |v| v + 2);
+    /// assert_eq!(v.decay(), 4);
+    /// ```
     fn decay(mut self) -> Self::Cancel {
         self.undo.take().map(|u| ManuallyDrop::into_inner(u));
         unsafe { ManuallyDrop::take(&mut self.val) }
@@ -46,6 +59,9 @@ impl<T, R, Undo: FnOnce(T) -> R> Drop for Simple<T, R, Undo> {
     }
 }
 
+/// Caries an undo operation + an owned mutable value
+///
+/// See [`own`](rewind::own) for examples
 pub struct Owning<T, Undo: FnOnce(T) -> T> {
     val: Option<ManuallyDrop<Simple<T, T, Undo>>>,
     stored: ManuallyDrop<T>,
@@ -102,9 +118,8 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
 
     /// Returns the modified part
     ///
-    /// Example usage:
     /// ```
-    /// use rewind::Atom;
+    /// # use rewind::Atom;
     /// let mut items = rewind::own_id(vec!["hello", "world"]);
     /// items.push("wow");
     /// let items = items.decay();
@@ -117,8 +132,14 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     }
 }
 
+///
+///
+/// See [`encase`](rewind::encase) for usage details
 pub struct Encased<S>(Rc<RefCell<S>>);
 
+/// An operation that has side effects on a shared state
+///
+/// The shared state `S` is managed via [`Encased<S>`]
 pub struct SideEffect<T, R, S, Undo: FnOnce(&mut S, T) -> R> {
     undo: Option<ManuallyDrop<Undo>>,
     value: ManuallyDrop<T>,
@@ -213,7 +234,7 @@ pub trait Atom: Drop {
     /// Undo the operation
     ///
     /// ```
-    /// use rewind::Atom;
+    /// # use rewind::Atom;
     /// let mut items = rewind::own_id(vec!["hello", "world"]);
     /// items.push("wow");
     /// let items = items.undo();
@@ -222,9 +243,8 @@ pub trait Atom: Drop {
     fn undo(self) -> Self::Undo;
     /// Forget about how to undo
     ///
-    /// Example usage:
     /// ```
-    /// use rewind::Atom;
+    /// # use rewind::Atom;
     /// let mut items = rewind::own_id(vec!["hello", "world"]);
     /// items.push("wow");
     /// let items = items.decay();
