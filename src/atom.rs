@@ -1,6 +1,5 @@
 use std::{
-    borrow::{BorrowMut},
-    cell::{RefCell},
+    cell::RefCell,
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     rc::Rc,
@@ -68,7 +67,9 @@ impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
         &mut self.stored
     }
     fn undo_mut(&mut self) -> Option<T> {
-        self.val.take().map(|mut val| unsafe { ManuallyDrop::take(&mut val) }.undo())
+        self.val
+            .take()
+            .map(|mut val| unsafe { ManuallyDrop::take(&mut val) }.undo())
     }
 }
 
@@ -111,7 +112,7 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     /// ```
     fn decay(mut self) -> Self::Cancel {
         unsafe { ManuallyDrop::take(&mut self.val.take().unwrap()) }.decay();
-        
+
         unsafe { ManuallyDrop::take(&mut self.stored) }
     }
 }
@@ -156,9 +157,6 @@ impl<T, R, S, Undo: FnOnce(&mut S, T) -> R> SideEffect<T, R, S, Undo> {
             value: ManuallyDrop::new(value),
             parent,
         }
-    }
-    pub(crate) fn new(value: T, undo: Undo, parent: S) -> Self {
-        Self::with_parent(value, undo, Encased::new(parent))
     }
     pub fn peel_mut<Rv, Ru, U: FnOnce(&mut S, Rv) -> Ru>(
         &mut self,

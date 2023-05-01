@@ -79,7 +79,7 @@ let result = (|| {
         },
     );
     may_fail()?;
-    println!("{}", value.cancel()?);
+    println!("{}", value.decay()?);
     Ok::<(), ()>(())
 })();
 assert!(result.is_err());
