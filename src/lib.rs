@@ -57,7 +57,7 @@ pub fn encase<S>(s: S) -> atom::Encased<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    
 
     use super::*;
 
@@ -102,8 +102,8 @@ mod tests {
     #[test]
     fn encasing_cannot_leak_abstraction_and_cause_panic_due_to_multiple_borrows() {
         let mut items = encase(vec![1, 2, 3]);
-        let b1 = items.peel_mut(|i| i.push(4), |i, _| i.pop());
-        let b2 = items.peel_mut(|i| i.push(5), |i, _| i.pop());
+        let _b1 = items.peel_mut(|i| i.push(4), |i, _| i.pop());
+        let _b2 = items.peel_mut(|i| i.push(5), |i, _| i.pop());
     }
     #[test]
     fn peeling_mutably_allows_reversing_a_mutable_operation() {

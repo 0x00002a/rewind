@@ -1,7 +1,6 @@
 use std::{
-    borrow::{Borrow, BorrowMut},
-    cell::{Cell, RefCell},
-    marker::PhantomData,
+    borrow::{BorrowMut},
+    cell::{RefCell},
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     rc::Rc,
@@ -69,11 +68,7 @@ impl<T, Undo: FnOnce(T) -> T> Owning<T, Undo> {
         &mut self.stored
     }
     fn undo_mut(&mut self) -> Option<T> {
-        if let Some(mut val) = self.val.take() {
-            Some(unsafe { ManuallyDrop::take(&mut val) }.undo())
-        } else {
-            None
-        }
+        self.val.take().map(|mut val| unsafe { ManuallyDrop::take(&mut val) }.undo())
     }
 }
 
@@ -116,8 +111,8 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     /// ```
     fn decay(mut self) -> Self::Cancel {
         unsafe { ManuallyDrop::take(&mut self.val.take().unwrap()) }.decay();
-        let stored = unsafe { ManuallyDrop::take(&mut self.stored) };
-        stored
+        
+        unsafe { ManuallyDrop::take(&mut self.stored) }
     }
 }
 
@@ -270,7 +265,7 @@ mod tests {
     fn cancelling_atom_stops_it_running_on_drop() {
         let mut scoped = 12;
         {
-            let mut atom = Simple::new(&mut scoped, |s| {
+            let atom = Simple::new(&mut scoped, |s| {
                 *s = 13;
             });
             atom.decay();
