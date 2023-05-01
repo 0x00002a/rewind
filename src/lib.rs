@@ -6,21 +6,6 @@ pub mod atom;
 
 pub use atom::Atom;
 
-/// Identity
-///
-/// Here to help with functions such as [`rewind::own`]
-///
-/// ```
-/// use rewind::Atom;
-/// let mut items = rewind::own(vec![1, 2, 3], rewind::id);
-/// items.clear();
-/// let items = items.undo();
-/// assert_eq!(items.len(), 3);
-/// ```
-pub fn id<T>(v: T) -> T {
-    v
-}
-
 /// Create an undo operation with stored data
 ///
 pub fn simple<T, R, Undo: FnOnce(T) -> R>(value: T, undo: Undo) -> atom::Simple<T, R, Undo> {
@@ -51,13 +36,16 @@ pub fn own<T: Clone, Undo: FnOnce(T) -> T>(value: T, undo: Undo) -> atom::Owning
     atom::Owning::new(value, undo)
 }
 
+pub fn own_id<T: Clone>(value: T) -> atom::Owning<T, impl FnOnce(T) -> T> {
+    atom::Owning::new(value, |c| c)
+}
+
 pub fn encase<S>(s: S) -> atom::Encased<S> {
     atom::Encased::new(s)
 }
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
 

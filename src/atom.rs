@@ -105,7 +105,7 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     /// Example usage:
     /// ```
     /// use rewind::Atom;
-    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
+    /// let mut items = rewind::own_id(vec!["hello", "world"]);
     /// items.push("wow");
     /// let items = items.decay();
     /// assert_eq!(items.get(2), Some(&"wow"));
@@ -214,7 +214,7 @@ pub trait Atom: Drop {
     ///
     /// ```
     /// use rewind::Atom;
-    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
+    /// let mut items = rewind::own_id(vec!["hello", "world"]);
     /// items.push("wow");
     /// let items = items.undo();
     /// assert_eq!(items.len(), 2);
@@ -225,7 +225,7 @@ pub trait Atom: Drop {
     /// Example usage:
     /// ```
     /// use rewind::Atom;
-    /// let mut items = rewind::own(vec!["hello", "world"], rewind::id);
+    /// let mut items = rewind::own_id(vec!["hello", "world"]);
     /// items.push("wow");
     /// let items = items.decay();
     /// assert_eq!(items.len(), 3);
@@ -240,11 +240,11 @@ mod tests {
 
     #[test]
     fn simple_undo_does_not_cause_ub_on_drop() {
-        Simple::new(vec!["test"], rewind::id).undo();
+        Simple::new(vec!["test"], |c| c).undo();
     }
     #[test]
     fn owned_undo_does_not_cause_ub_on_drop() {
-        Owning::new(vec!["test"], rewind::id).undo();
+        Owning::new(vec!["test"], |c| c).undo();
     }
 
     #[test]
