@@ -1,6 +1,9 @@
 # Rewind
 _Its rewind time babeee_
 
+
+![License: GPLv3](https://img.shields.io/github/license/0x00002a/rewind?style=flat-square)
+
 This crate contains utilities to help with developing APIs with [strong exception
 guarantees](https://en.wikipedia.org/wiki/Exception_safety). Basically, if the function
 fails in some way then it should be like the function was never called.
