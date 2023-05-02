@@ -7,7 +7,7 @@ readme = "README.md"
 homepage = "https://github.com/0x00002a/rewind"
 license = "GPL-3.0-only"
 description = "Strong exception guarentee support types"
-keywords = ["exception", "guarentee", "error handling"]
+keywords = ["exception", "guarentee", "error_handling"]
 exclude = [".github/**"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
