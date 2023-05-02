@@ -2,6 +2,11 @@
 name = "rewind"
 version = "0.1.0"
 edition = "2021"
+authors = ["0x00002a"]
+readme = "README.md"
+homepage = "https://github.com/0x00002a/rewind"
+license = "GPL-3.0-only"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
