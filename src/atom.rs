@@ -30,7 +30,7 @@ impl<T, R, Undo: FnOnce(T) -> R> Simple<T, R, Undo> {
 
 impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
     type Undo = R;
-    type Cancel = T;
+    type Decay = T;
     /// Returns the result of the undo function
     ///
     /// ```
@@ -48,7 +48,7 @@ impl<T, R, Undo: FnOnce(T) -> R> Atom for Simple<T, R, Undo> {
     /// let v = rewind::simple(4, |v| v + 2);
     /// assert_eq!(v.decay(), 4);
     /// ```
-    fn decay(mut self) -> Self::Cancel {
+    fn decay(mut self) -> Self::Decay {
         self.undo.take().map(|u| ManuallyDrop::into_inner(u));
         unsafe { ManuallyDrop::take(&mut self.val) }
     }
@@ -125,7 +125,7 @@ impl<T: Debug, Undo: FnOnce(T) -> T> Debug for Owning<T, Undo> {
 
 impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     type Undo = T;
-    type Cancel = T;
+    type Decay = T;
     fn undo(mut self) -> Self::Undo {
         self.undo_mut().unwrap()
     }
@@ -139,7 +139,7 @@ impl<T, Undo: FnOnce(T) -> T> Atom for Owning<T, Undo> {
     /// let items = items.decay();
     /// assert_eq!(items.get(2), Some(&"wow"));
     /// ```
-    fn decay(mut self) -> Self::Cancel {
+    fn decay(mut self) -> Self::Decay {
         unsafe { ManuallyDrop::take(&mut self.val.take().unwrap()) }.decay();
 
         unsafe { ManuallyDrop::take(&mut self.stored) }
@@ -232,14 +232,14 @@ impl<T, R, S, Undo: FnOnce(&mut S, T) -> R> Drop for SideEffect<T, R, S, Undo> {
 }
 impl<T, S, R, Undo: FnOnce(&mut S, T) -> R> Atom for SideEffect<T, R, S, Undo> {
     type Undo = R;
-    type Cancel = T;
+    type Decay = T;
 
     fn undo(mut self) -> Self::Undo {
         let value = unsafe { ManuallyDrop::take(&mut self.value) };
         ManuallyDrop::into_inner(self.undo.take().unwrap())(&mut self.parent, value)
     }
 
-    fn decay(mut self) -> Self::Cancel {
+    fn decay(mut self) -> Self::Decay {
         self.undo.take();
         unsafe { ManuallyDrop::take(&mut self.value) }
     }
@@ -260,7 +260,7 @@ impl<T: Debug, S: Debug, R, Undo: FnOnce(&mut S, T) -> R> Debug for SideEffect<T
 #[allow(drop_bounds)]
 pub trait Atom: Drop {
     type Undo;
-    type Cancel;
+    type Decay;
     /// Undo the operation
     ///
     /// ```
@@ -280,7 +280,7 @@ pub trait Atom: Drop {
     /// let items = items.decay();
     /// assert_eq!(items.len(), 3);
     /// ```
-    fn decay(self) -> Self::Cancel;
+    fn decay(self) -> Self::Decay;
 }
 
 #[cfg(test)]
