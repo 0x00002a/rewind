@@ -89,3 +89,45 @@ let result = (|| {
 assert!(result.is_err());
 assert_eq!(s.els, vec![4, 5]);
 ```
+
+The rewind version uses [`peel_mut`](rewind::atom::Encased::peel_mut) in order to
+define the `pop` with an undo. The [`decay`](rewind::Atom::decay) call would
+cause the undo to be forgotten about, but since `may_fail` will cause an early
+return before that point, the undo action is called and the pop is undone.
+
+
+For values that are cheap to copy, [`own_id`](rewind::own_id) can be used to "peel off" a field and modify it. For example:
+
+```rust
+use rewind::Atom;
+struct Person {
+    name: String,
+    age: u8,
+}
+impl Person {
+    fn set_name_and_age(&mut self, name: String, age: u8) {
+        let mut name_am = rewind::own_id(self.name.clone());
+        *name_am = name;
+        if age > 200 {
+            return;
+        }
+        self.age = age;
+        self.name = name_am.decay();
+    }
+}
+let mut p = Person { name: "Sarah".to_owned(), age: 43 };
+
+p.set_name_and_age("Sasha".to_owned(), 201);
+assert_eq!(&p.name, "Sarah");
+assert_eq!(p.age, 43);
+
+p.set_name_and_age("Sasha".to_owned(), 44);
+assert_eq!(&p.name, "Sasha");
+assert_eq!(p.age, 44);
+```
+
+Now this is of course quite a contrived example, the API for `Person` is very
+strange and the simplest way to obey the contract would be to just move the
+assignment to `name` to after the validation. It does however show how
+[`own`](rewind::own) can be used for modifying struct values in an error safe
+way.
