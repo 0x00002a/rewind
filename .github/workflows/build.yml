@@ -1,6 +1,9 @@
 # vim: tw=2,ts=2,sw=2
 name: build + test
 on: [push]
+
+env:
+  RUSTFLAGS: "-Dwarnings"
 jobs:
   build:
     strategy:
@@ -19,8 +22,8 @@ jobs:
           override: true
           components: clippy
       - name: build
-        run: RUSTFLAGS="-Dwarnings" cargo build --tests
+        run: cargo build --tests
       - name: clippy
-        run: RUSTFLAGS="-Dwarnings" cargo clippy --tests
+        run: cargo clippy --tests
       - name: test
         run: cargo test
